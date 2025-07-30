@@ -1,0 +1,114 @@
+name: Advanced Multi-Spreadsheet Search Tool with Enhanced Search Experience
+description: |
+  A React-based web application that provides a superior search experience across multiple spreadsheet files (Excel, CSV, TSV). It features intelligent parsing, advanced search capabilities, real-time filtering, data enrichment through tagging, and optional cloud integration. The app prioritizes performance, accessibility, and user experience to handle large datasets efficiently while providing intuitive data exploration tools.
+
+context:
+  # Frontend Stack
+  - Use React 18+ with TypeScript for type safety and better development experience
+  - Use Material UI or Tailwind CSS for consistent, accessible design system
+  - Implement React Query/TanStack Query for efficient data fetching and caching
+  - Use Zustand or Redux Toolkit for state management of search state and user preferences
+
+  # File Processing & Search
+  - Use SheetJS (xlsx) to parse Excel files (.xlsx, .xls) into JSON
+  - Use PapaParse for CSV/TSV file parsing with robust error handling
+  - Use Fuse.js for fuzzy search with configurable thresholds and weighted fields
+  - Implement search debouncing (300ms) to optimize performance
+  - Support search operators: exact quotes, exclude terms (-term), field-specific (column:value)
+
+  # Data Management & Storage
+  - Store parsed data in IndexedDB for offline access and faster subsequent loads
+  - Cache search indices in memory with LRU eviction for large datasets
+  - Use localStorage for user preferences, recent searches, and quick tags
+  - Optional backend integration: Firebase, Supabase, or custom API for collaboration
+  - Implement data compression for large spreadsheets (JSON.stringify + LZ compression)
+
+  # Search Experience Features
+  - Real-time search with instant results (< 100ms for most queries)
+  - Advanced filters: date ranges, numeric ranges, boolean columns, custom criteria
+  - Search highlighting with context snippets
+  - Search history and saved searches functionality
+  - Auto-complete suggestions based on column values and previous searches
+  - Search across specific columns or all columns
+  - Support for regex patterns in advanced mode
+
+  # Data Enrichment & Tagging
+  - Row-level tagging system with color-coded tags
+  - Bulk tagging operations for filtered results
+  - Tag autocomplete and suggestion system
+  - Custom metadata fields that become searchable
+  - Import/export tag configurations
+
+  # Performance Optimizations
+  - Virtual scrolling for large datasets (10,000+ rows)
+  - Progressive loading of search results with pagination
+  - Web Workers for heavy parsing and search operations
+  - Memoized search results and intelligent caching
+  - Background processing of file uploads
+
+  # User Interface & Experience
+  - Responsive design that works on mobile, tablet, and desktop
+  - Keyboard shortcuts for power users (Ctrl+K for search, Ctrl+F for find-in-page)
+  - Drag-and-drop file upload with progress indicators
+  - Split-pane view: file browser + search results
+  - Customizable column visibility and ordering
+  - Export filtered results to Excel, CSV, or JSON
+  - Print-friendly views for reports
+
+  # Error Handling & Validation
+  - Graceful handling of corrupted or unsupported files
+  - User-friendly error messages with suggested fixes
+  - File size limits with clear warnings (e.g., 50MB default)
+  - Data validation for imported spreadsheets
+  - Offline mode with sync capabilities when connection restored
+
+  # Accessibility & Internationalization
+  - WCAG 2.1 AA compliance for screen readers and keyboard navigation
+  - ARIA labels for search results and interactive elements
+  - High contrast mode support
+  - Internationalization support with react-i18next
+  - Configurable font sizes and themes
+
+  # Cloud Integration (Optional)
+  - Microsoft Graph API for OneDrive/SharePoint integration
+  - Google Drive API for Google Sheets access
+  - Dropbox API for cloud file access
+  - Real-time collaboration features with conflict resolution
+  - Version history and change tracking
+
+goals:
+  # Core Search Functionality
+  - Provide sub-second search results across multiple large spreadsheets
+  - Support complex search queries with Boolean operators and field-specific searches
+  - Enable fuzzy matching with configurable similarity thresholds
+  - Implement search result ranking based on relevance and user behavior
+
+  # Data Enhancement
+  - Allow users to enrich data with tags, notes, and custom metadata
+  - Make all enrichments fully searchable and filterable
+  - Support bulk operations for efficient data management
+  - Enable collaborative tagging and data curation
+
+  # Performance & Scalability
+  - Handle datasets with 100,000+ rows without performance degradation
+  - Optimize memory usage for large files through streaming and chunking
+  - Provide progress feedback for long-running operations
+  - Support concurrent file processing
+
+  # User Experience
+  - Create an intuitive interface that requires minimal learning curve
+  - Provide powerful features for advanced users without cluttering the basic interface
+  - Support workflow automation through saved searches and filters
+  - Enable seamless collaboration and data sharing
+
+  # Integration & Extensibility
+  - Support various file formats (Excel, CSV, TSV, Google Sheets)
+  - Provide API endpoints for programmatic access
+  - Enable plugin architecture for custom data processors
+  - Support integration with popular productivity tools
+
+  # Data Security & Privacy
+  - Implement client-side encryption for sensitive data
+  - Provide granular sharing controls
+  - Support data export and deletion (GDPR compliance)
+  - Enable audit trails for data access and modifications
