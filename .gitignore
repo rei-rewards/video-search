@@ -29,4 +29,4 @@ Thumbs.db
 .eslintcache
 
 # Package manager lockfiles (keep yarn.lock)
-package-lock.json
+package-lock.json*.xlsx

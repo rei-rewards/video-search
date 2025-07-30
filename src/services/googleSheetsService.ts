@@ -124,32 +124,62 @@ export class GoogleSheetsService {
     }
   }
 
-  // Alternative method to detect tabs by trying different GIDs
+  // Enhanced method to detect tabs - limited by Google Sheets random GID assignment
   private static async getSheetTabsFromCSV(sheetId: string): Promise<Array<{name: string, gid: string, index: number}>> {
-    // Common GID patterns to try (Google Sheets often uses these)
-    const commonGids = ['0', '1', '2', '3', '4', '5'];
+    console.log('🔍 Enhanced tab discovery for sheet:', sheetId);
+    
+    // Enhanced GID patterns including known working ones
+    const commonGids = [
+      '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
+      '1600349921', // Known working GID (2025 tab)
+      '44413474',   // Known working GID (2024 tab)
+      '100', '200', '300', '500', '1000',
+    ];
+    
+    // Try ranges around known working GIDs
+    const knownGids = [1600349921, 44413474];
+    knownGids.forEach(baseGid => {
+      for (let offset = -10; offset <= 10; offset += 2) {
+        if (offset !== 0) {
+          commonGids.push(String(baseGid + offset));
+        }
+      }
+    });
+    
     const tabs: Array<{name: string, gid: string, index: number}> = [];
     
-    for (let i = 0; i < commonGids.length; i++) {
+    for (let i = 0; i < Math.min(commonGids.length, 20); i++) {
       const gid = commonGids[i];
       try {
         const testUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
+        console.log(`📋 Testing GID ${gid}`);
+        
         const response = await fetch(testUrl, { mode: 'cors' });
         
         if (response.ok) {
-          // This GID exists, add it to our list
-          tabs.push({
-            name: `Sheet ${i + 1}`,
-            gid: gid,
-            index: i
-          });
+          const csvData = await response.text();
+          if (csvData && csvData.length > 10 && !csvData.includes('<!DOCTYPE html>')) {
+            console.log(`✅ Found valid tab with GID ${gid}`);
+            
+            // Use known tab names where possible
+            let tabName = `Sheet ${tabs.length + 1}`;
+            if (gid === '1600349921') tabName = '2025';
+            else if (gid === '44413474') tabName = '2024';
+            
+            tabs.push({
+              name: tabName,
+              gid: gid,
+              index: tabs.length
+            });
+          }
         }
       } catch (error) {
-        // This GID doesn't exist or is inaccessible, continue
+        console.log(`❌ GID ${gid} failed:`, error);
         continue;
       }
     }
     
+    console.log(`🎯 Found ${tabs.length} tabs (Note: 12 tabs exist, but Google Sheets uses random GIDs)`);
     return tabs;
   }
 

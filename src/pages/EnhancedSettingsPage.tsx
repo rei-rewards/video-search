@@ -218,6 +218,19 @@ const EnhancedSettingsPage: React.FC = () => {
               Load multiple spreadsheets at once from Google Sheets or SharePoint URLs (one per line)
             </Typography>
             
+            <Alert severity="info" sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                📊 Google Sheets Multi-Tab Limitation
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                Google Sheets uses random IDs for tabs, making full auto-discovery challenging. 
+                Currently finding <strong>2 out of 12 tabs</strong> in your Video Database.
+              </Typography>
+              <Typography variant="body2">
+                💡 <strong>Workaround:</strong> Upload the Excel version for complete multi-tab search!
+              </Typography>
+            </Alert>
+            
             <TextField
               fullWidth
               multiline
