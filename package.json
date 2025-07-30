@@ -2,7 +2,7 @@
   "name": "spreadsheet-search-app",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://tulipano.github.io/adobe-video-search",
+  "homepage": "https://tulipano_adobe.github.io/adobe-video-search",
   "dependencies": {
     "@azure/msal-browser": "^4.16.0",
     "@emotion/react": "^11.11.1",
