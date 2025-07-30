@@ -32,47 +32,58 @@ const FileUploadDialog: React.FC<FileUploadDialogProps> = ({ open, onClose }) =>
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const { addSpreadsheet } = useAppStore();
+  const { addSpreadsheet, addMultipleSpreadsheets } = useAppStore();
 
-  const processExcelFile = useCallback(async (file: File): Promise<SpreadsheetData> => {
+  // Process ALL worksheets from an Excel file (enhanced for multi-worksheet support)
+  const processAllExcelWorksheets = useCallback(async (file: File): Promise<SpreadsheetData[]> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
           const data = new Uint8Array(e.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array' });
+          const results: SpreadsheetData[] = [];
           
-          // Get the first worksheet
-          const worksheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[worksheetName];
-          
-          // Convert to JSON with header row
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
-            header: 1,
-            defval: '',
-          }) as any[][];
+          // Process each worksheet
+          workbook.SheetNames.forEach((worksheetName, index) => {
+            const worksheet = workbook.Sheets[worksheetName];
+            
+            // Convert to JSON with header row
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+              header: 1,
+              defval: '',
+            }) as any[][];
 
-          if (jsonData.length === 0) {
-            throw new Error('File appears to be empty');
+            if (jsonData.length > 0) {
+              // First row as headers
+              const headers = jsonData[0].map(h => h?.toString() || '');
+              const dataRows = jsonData.slice(1);
+
+              const spreadsheetData: SpreadsheetData = {
+                id: `sheet_${Date.now()}_${index}`,
+                name: `${file.name.replace(/\.[^/.]+$/, '')} - ${worksheetName}`,
+                filename: file.name,
+                data: dataRows,
+                headers,
+                lastModified: Date.now(),
+                source: 'upload',
+                tags: {},
+                metadata: {
+                  worksheetName,
+                  worksheetIndex: index,
+                  originalFileName: file.name,
+                },
+              };
+
+              results.push(spreadsheetData);
+            }
+          });
+
+          if (results.length === 0) {
+            throw new Error('File appears to be empty or contains no valid worksheets');
           }
 
-          // First row as headers
-          const headers = jsonData[0].map(h => h?.toString() || '');
-          const dataRows = jsonData.slice(1);
-
-          const spreadsheetData: SpreadsheetData = {
-            id: `sheet_${Date.now()}`,
-            name: file.name.replace(/\.[^/.]+$/, ''), // Remove file extension
-            filename: file.name,
-            data: dataRows,
-            headers,
-            lastModified: Date.now(),
-            source: 'upload',
-            tags: {},
-            metadata: {},
-          };
-
-          resolve(spreadsheetData);
+          resolve(results);
         } catch (err) {
           reject(err);
         }
@@ -81,6 +92,12 @@ const FileUploadDialog: React.FC<FileUploadDialogProps> = ({ open, onClose }) =>
       reader.readAsArrayBuffer(file);
     });
   }, []);
+
+  // Process single worksheet for backward compatibility
+  const processExcelFile = useCallback(async (file: File): Promise<SpreadsheetData> => {
+    const allWorksheets = await processAllExcelWorksheets(file);
+    return allWorksheets[0]; // Return first worksheet for compatibility
+  }, [processAllExcelWorksheets]);
 
   const processCSVFile = useCallback(async (file: File): Promise<SpreadsheetData> => {
     return new Promise((resolve, reject) => {
@@ -136,17 +153,17 @@ const FileUploadDialog: React.FC<FileUploadDialogProps> = ({ open, onClose }) =>
 
         // Check file type
         const extension = file.name.split('.').pop()?.toLowerCase();
-        let spreadsheetData: SpreadsheetData;
 
         if (extension === 'xlsx' || extension === 'xls') {
-          spreadsheetData = await processExcelFile(file);
+          // Load ALL worksheets from Excel files
+          const allWorksheets = await processAllExcelWorksheets(file);
+          addMultipleSpreadsheets(allWorksheets);
         } else if (extension === 'csv') {
-          spreadsheetData = await processCSVFile(file);
+          const spreadsheetData = await processCSVFile(file);
+          addSpreadsheet(spreadsheetData);
         } else {
           throw new Error(`Unsupported file type: ${extension}`);
         }
-
-        addSpreadsheet(spreadsheetData);
       }
 
       setUploadProgress(100);

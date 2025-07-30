@@ -124,20 +124,43 @@ const EnhancedSettingsPage: React.FC = () => {
       try {
         setLoadProgress(((i + 1) / urls.length) * 100);
 
-        let spreadsheetData;
         if (GoogleSheetsService.isGoogleSheetsUrl(url)) {
-          spreadsheetData = await GoogleSheetsService.loadFromUrl(url);
+          // Load ALL tabs from Google Sheets
+          const allTabsData = await GoogleSheetsService.loadAllTabsFromUrl(url);
+          loadedSheets.push(...allTabsData);
+          
+          if (allTabsData.length === 1) {
+            results.push({
+              url,
+              success: true,
+              name: allTabsData[0].name,
+            });
+          } else {
+            results.push({
+              url,
+              success: true,
+              name: `${allTabsData.length} tabs loaded from Google Sheets`,
+            });
+          }
         } else {
-          // Assume SharePoint/OneDrive
-          spreadsheetData = await sharePointService.loadFileFromUrl(url);
+          // Assume SharePoint/OneDrive - Load ALL worksheets
+          const allWorksheetsData = await sharePointService.loadAllWorksheetsFromUrl(url);
+          loadedSheets.push(...allWorksheetsData);
+          
+          if (allWorksheetsData.length === 1) {
+            results.push({
+              url,
+              success: true,
+              name: allWorksheetsData[0].name,
+            });
+          } else {
+            results.push({
+              url,
+              success: true,
+              name: `${allWorksheetsData.length} worksheets loaded from SharePoint`,
+            });
+          }
         }
-
-        loadedSheets.push(spreadsheetData);
-        results.push({
-          url,
-          success: true,
-          name: spreadsheetData.name,
-        });
       } catch (error) {
         console.error(`Failed to load ${url}:`, error);
         results.push({

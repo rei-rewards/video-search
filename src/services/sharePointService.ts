@@ -65,6 +65,62 @@ class SharePointService {
     });
   }
 
+  // Load ALL worksheets from a SharePoint file URL (enhanced for multi-worksheet support)
+  async loadAllWorksheetsFromUrl(fileUrl: string): Promise<SpreadsheetData[]> {
+    // First, try loading without authentication for public/shared links
+    try {
+      return await this.loadAllWorksheetsDirectly(fileUrl);
+    } catch (directError) {
+      console.log('Direct download failed, trying authenticated access...', directError);
+      
+      // If direct download fails, try authenticated approach
+      if (!this.graphClient) {
+        throw new Error('File requires authentication. Please sign in to your Microsoft account first using the "Connect to SharePoint" button above.');
+      }
+    }
+
+    try {
+      // Extract the file path from SharePoint URL
+      const urlPattern = /https:\/\/[^\/]+\/sites\/[^\/]+\/[^\/]+\/(.+)/;
+      const match = fileUrl.match(urlPattern);
+      
+      if (!match) {
+        throw new Error('Invalid SharePoint URL format');
+      }
+
+      // Get file metadata and download URL
+      const fileInfo = await this.graphClient
+        .api(`/me/drive/root:/${match[1]}`)
+        .get();
+
+      // Download the file content
+      const fileContent = await this.graphClient
+        .api(`/me/drive/items/${fileInfo.id}/content`)
+        .getStream();
+
+      // Convert stream to buffer
+      const chunks: Buffer[] = [];
+      for await (const chunk of fileContent) {
+        chunks.push(chunk);
+      }
+      const buffer = Buffer.concat(chunks);
+
+      // Parse all worksheets from the file
+      const fileName = fileInfo.name;
+      const fileExtension = fileName.split('.').pop()?.toLowerCase();
+      
+      return this.parseAllWorksheetsFromBuffer(buffer, fileName, fileExtension, {
+        lastModified: new Date(fileInfo.lastModifiedDateTime).getTime(),
+        originalUrl: fileUrl,
+        source: 'sharepoint'
+      });
+    } catch (error) {
+      console.error('Failed to load file from SharePoint:', error);
+      throw error;
+    }
+  }
+
+  // Load single worksheet for backward compatibility
   async loadFileFromUrl(fileUrl: string): Promise<SpreadsheetData> {
     // First, try loading without authentication for public/shared links
     try {
@@ -183,6 +239,122 @@ class SharePointService {
 
   isAuthenticated() {
     return this.account !== null && this.graphClient !== null;
+  }
+
+  // Helper method to parse all worksheets from a buffer
+  private parseAllWorksheetsFromBuffer(buffer: Buffer | ArrayBuffer, fileName: string, fileExtension: string | undefined, metadata: any): SpreadsheetData[] {
+    if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+      const workbook = XLSX.read(buffer, { type: buffer instanceof Buffer ? 'buffer' : 'array' });
+      const results: SpreadsheetData[] = [];
+      
+      // Process each worksheet
+      workbook.SheetNames.forEach((sheetName, index) => {
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+          header: 1,
+          defval: '',
+        }) as any[][];
+        
+        const headers = jsonData[0]?.map(h => h?.toString() || '') || [];
+        const data = jsonData.slice(1);
+        
+        results.push({
+          id: `${metadata.source}_${Date.now()}_${index}`,
+          name: `${fileName.replace(/\.[^/.]+$/, '')} - ${sheetName}`,
+          filename: fileName,
+          data,
+          headers,
+          lastModified: metadata.lastModified || Date.now(),
+          source: metadata.source as any,
+          tags: {},
+          metadata: {
+            ...metadata,
+            worksheetName: sheetName,
+            worksheetIndex: index,
+          },
+        });
+      });
+      
+      return results;
+    } else if (fileExtension === 'csv') {
+      // CSV files only have one "sheet"
+      const text = buffer instanceof Buffer ? buffer.toString('utf-8') : new TextDecoder().decode(buffer);
+      const lines = text.split('\n').filter(line => line.trim());
+      const parsedData = lines.map(line => line.split(','));
+      const headers = parsedData[0] || [];
+      const data = parsedData.slice(1);
+      
+      return [{
+        id: `${metadata.source}_${Date.now()}`,
+        name: fileName.replace(/\.[^/.]+$/, ''),
+        filename: fileName,
+        data,
+        headers,
+        lastModified: metadata.lastModified || Date.now(),
+        source: metadata.source as any,
+        tags: {},
+        metadata,
+      }];
+    } else {
+      throw new Error(`Unsupported file type: ${fileExtension}`);
+    }
+  }
+
+  // Load all worksheets directly for public/shared links
+  private async loadAllWorksheetsDirectly(fileUrl: string): Promise<SpreadsheetData[]> {
+    // Try to load file directly for public/shared SharePoint links
+    let downloadUrl = fileUrl;
+    
+    // Convert SharePoint sharing URLs to direct download URLs
+    if (fileUrl.includes('sharepoint.com')) {
+      // Handle different SharePoint URL formats
+      if (fileUrl.includes('/_layouts/15/guestaccess.aspx')) {
+        // Already a guest access URL, try to use it directly
+        downloadUrl = fileUrl;
+      } else if (fileUrl.includes('?')) {
+        // Add download parameter to existing URL
+        downloadUrl = fileUrl + '&download=1';
+      } else {
+        // Add download parameter to direct file URL
+        downloadUrl = fileUrl + '?download=1';
+      }
+    }
+    
+    console.log('Attempting direct download from:', downloadUrl);
+    
+    const response = await fetch(downloadUrl, {
+      method: 'GET',
+      mode: 'cors',
+      credentials: 'include', // Include cookies for authentication
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Direct download failed: ${response.status} ${response.statusText}`);
+    }
+    
+    const arrayBuffer = await response.arrayBuffer();
+    
+    // Extract filename from URL or response headers
+    let fileName = 'sharepoint-file';
+    const contentDisposition = response.headers.get('content-disposition');
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+      if (match && match[1]) {
+        fileName = match[1].replace(/['"]/g, '');
+      }
+    } else {
+      // Extract from URL
+      const urlParts = fileUrl.split('/');
+      fileName = urlParts[urlParts.length - 1].split('?')[0];
+    }
+    
+    // Parse all worksheets from the file
+    const fileExtension = fileName.split('.').pop()?.toLowerCase();
+    return this.parseAllWorksheetsFromBuffer(arrayBuffer, fileName, fileExtension, {
+      lastModified: Date.now(),
+      originalUrl: fileUrl,
+      source: 'sharepoint'
+    });
   }
 
   private async loadFileDirectly(fileUrl: string): Promise<SpreadsheetData> {

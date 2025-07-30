@@ -232,7 +232,11 @@ const EnhancedSearchResults: React.FC<EnhancedSearchResultsProps> = ({
                   {result.spreadsheetName}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  {getSourceLabel(result.spreadsheetSource)} • Row {result.rowIndex + 1}
+                  {getSourceLabel(result.spreadsheetSource)}
+                  {result.metadata?.tabName && ` • Tab: ${result.metadata.tabName}`}
+                  {result.metadata?.worksheetName && ` • Sheet: ${result.metadata.worksheetName}`}
+                  {result.metadata?.tabGid && result.metadata.tabGid !== '0' && ` • (${result.metadata.tabGid})`}
+                  {` • Row ${result.rowIndex + 1}`}
                 </Typography>
               </Box>
             </Box>

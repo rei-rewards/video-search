@@ -38,8 +38,128 @@ export class GoogleSheetsService {
     return `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
   }
 
-  // Load spreadsheet data from Google Sheets URL
+  // Load ALL tabs from a Google Sheets URL (enhanced for multi-tab support)
+  static async loadAllTabsFromUrl(url: string): Promise<SpreadsheetData[]> {
+    try {
+      const sheetId = this.extractSheetId(url);
+      if (!sheetId) {
+        throw new Error('Could not extract sheet ID from URL');
+      }
+
+      // Try to get sheet metadata to discover all tabs
+      const tabs = await this.getSheetTabs(sheetId);
+      
+      if (tabs.length === 0) {
+        // Fallback to single tab if we can't get metadata
+        const singleSheet = await this.loadSingleTab(url);
+        return [singleSheet];
+      }
+
+      // Load each tab as a separate spreadsheet
+      const results: SpreadsheetData[] = [];
+      for (const tab of tabs) {
+        try {
+          const tabUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/edit#gid=${tab.gid}`;
+          const spreadsheetData = await this.loadSingleTab(tabUrl);
+          
+          // Update name to include tab name
+          spreadsheetData.name = `${this.extractSheetName(url) || 'Google Sheets'} - ${tab.name}`;
+          spreadsheetData.metadata = {
+            ...spreadsheetData.metadata,
+            tabName: tab.name,
+            tabIndex: tab.index,
+            originalUrl: url,
+            tabGid: tab.gid
+          };
+          
+          results.push(spreadsheetData);
+        } catch (error) {
+          console.warn(`Failed to load tab "${tab.name}":`, error);
+          // Continue with other tabs
+        }
+      }
+
+      return results.length > 0 ? results : [await this.loadSingleTab(url)];
+    } catch (error) {
+      console.error('Error loading Google Sheets tabs:', error);
+      // Fallback to single tab loading
+      return [await this.loadSingleTab(url)];
+    }
+  }
+
+  // Get list of all tabs/sheets in a Google Spreadsheet
+  private static async getSheetTabs(sheetId: string): Promise<Array<{name: string, gid: string, index: number}>> {
+    try {
+      // Try the public feed endpoint (works for public sheets)
+      const feedUrl = `https://spreadsheets.google.com/feeds/worksheets/${sheetId}/public/basic?alt=json`;
+      
+      const response = await fetch(feedUrl, { mode: 'cors' });
+      
+      if (!response.ok) {
+        console.log('Could not access public feed, trying CSV approach...');
+        return await this.getSheetTabsFromCSV(sheetId);
+      }
+
+      const data = await response.json();
+      
+      if (data.feed && data.feed.entry) {
+        return data.feed.entry.map((entry: any, index: number) => {
+          const title = entry.title?.$t || `Sheet ${index + 1}`;
+          const link = entry.link?.find((l: any) => l.rel === 'http://schemas.google.com/spreadsheets/2006#worksheetsfeed');
+          const gidMatch = link?.href?.match(/\/([0-9]+)$/);
+          const gid = gidMatch ? gidMatch[1] : '0';
+          
+          return {
+            name: title,
+            gid: gid,
+            index: index
+          };
+        });
+      }
+      
+      return [];
+    } catch (error) {
+      console.log('Public feed approach failed, trying alternatives...');
+      return await this.getSheetTabsFromCSV(sheetId);
+    }
+  }
+
+  // Alternative method to detect tabs by trying different GIDs
+  private static async getSheetTabsFromCSV(sheetId: string): Promise<Array<{name: string, gid: string, index: number}>> {
+    // Common GID patterns to try (Google Sheets often uses these)
+    const commonGids = ['0', '1', '2', '3', '4', '5'];
+    const tabs: Array<{name: string, gid: string, index: number}> = [];
+    
+    for (let i = 0; i < commonGids.length; i++) {
+      const gid = commonGids[i];
+      try {
+        const testUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
+        const response = await fetch(testUrl, { mode: 'cors' });
+        
+        if (response.ok) {
+          // This GID exists, add it to our list
+          tabs.push({
+            name: `Sheet ${i + 1}`,
+            gid: gid,
+            index: i
+          });
+        }
+      } catch (error) {
+        // This GID doesn't exist or is inaccessible, continue
+        continue;
+      }
+    }
+    
+    return tabs;
+  }
+
+  // Load spreadsheet data from Google Sheets URL (single tab)
   static async loadFromUrl(url: string): Promise<SpreadsheetData> {
+    return this.loadSingleTab(url);
+  }
+
+  // Load a single tab from Google Sheets URL
+  private static async loadSingleTab(url: string): Promise<SpreadsheetData> {
     try {
       const exportUrl = this.getExportUrl(url);
       
@@ -126,15 +246,16 @@ export class GoogleSheetsService {
     return /docs\.google\.com\/spreadsheets/.test(url);
   }
 
-  // Load multiple sheets from URLs
+  // Load multiple sheets from URLs (with multi-tab support)
   static async loadMultipleFromUrls(urls: string[]): Promise<SpreadsheetData[]> {
     const results: SpreadsheetData[] = [];
     const errors: string[] = [];
 
     for (const url of urls) {
       try {
-        const data = await this.loadFromUrl(url.trim());
-        results.push(data);
+        // Use the new multi-tab loading for each URL
+        const sheetsFromUrl = await this.loadAllTabsFromUrl(url.trim());
+        results.push(...sheetsFromUrl);
       } catch (error) {
         console.error(`Failed to load sheet from ${url}:`, error);
         errors.push(`${url}: ${error instanceof Error ? error.message : 'Unknown error'}`);
