@@ -40,19 +40,46 @@ export class GoogleSheetsService {
 
   // Load ALL tabs from a Google Sheets URL (enhanced for multi-tab support)
   static async loadAllTabsFromUrl(url: string): Promise<SpreadsheetData[]> {
+    console.log('🚀 Starting multi-tab load for URL:', url);
+    
     try {
       const sheetId = this.extractSheetId(url);
       if (!sheetId) {
         throw new Error('Could not extract sheet ID from URL');
       }
 
+      console.log('📄 Extracted Sheet ID:', sheetId);
+
+      // IMPORTANT: Extract the specific GID from the URL first
+      const specificGid = this.extractGid(url);
+      console.log('🎯 Specific GID from URL:', specificGid);
+
       // Try to get sheet metadata to discover all tabs
       const tabs = await this.getSheetTabs(sheetId);
       
+      console.log('📊 Found tabs via discovery:', tabs);
+
+      // ALWAYS ensure the specific GID from URL is included
+      const hasSpecificGid = tabs.some(tab => tab.gid === specificGid);
+      if (!hasSpecificGid && specificGid !== '0') {
+        console.log(`✨ Adding specific GID ${specificGid} from URL (not found in discovery)`);
+        tabs.unshift({
+          name: specificGid === '1735537479' ? 'Archive' : `Tab ${specificGid}`,
+          gid: specificGid,
+          index: 0
+        });
+      }
+
       if (tabs.length === 0) {
         // Fallback to single tab if we can't get metadata
         const singleSheet = await this.loadSingleTab(url);
         return [singleSheet];
+      }
+
+      if (tabs.length === 1) {
+        console.log('ℹ️ Only one tab found, but loading via multi-tab method');
+      } else {
+        console.log(`🎯 Loading ${tabs.length} tabs!`);
       }
 
       // Load each tab as a separate spreadsheet
@@ -133,11 +160,12 @@ export class GoogleSheetsService {
       '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
       '1600349921', // Known working GID (2025 tab)
       '44413474',   // Known working GID (2024 tab)
+      '1735537479', // Known working GID (Archive tab)
       '100', '200', '300', '500', '1000',
     ];
     
     // Try ranges around known working GIDs
-    const knownGids = [1600349921, 44413474];
+    const knownGids = [1600349921, 44413474, 1735537479];
     knownGids.forEach(baseGid => {
       for (let offset = -10; offset <= 10; offset += 2) {
         if (offset !== 0) {
@@ -162,9 +190,10 @@ export class GoogleSheetsService {
             console.log(`✅ Found valid tab with GID ${gid}`);
             
             // Use known tab names where possible
-            let tabName = `Sheet ${tabs.length + 1}`;
-            if (gid === '1600349921') tabName = '2025';
-            else if (gid === '44413474') tabName = '2024';
+                              let tabName = `Sheet ${tabs.length + 1}`;
+                  if (gid === '1600349921') tabName = '2025';
+                  else if (gid === '44413474') tabName = '2024';
+                  else if (gid === '1735537479') tabName = 'Archive';
             
             tabs.push({
               name: tabName,
